@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from datetime import datetime
 
 
@@ -56,9 +57,15 @@ class FinanceManager:
             f.write("-" * 40 + "\n")
             f.write(f"CURRENT BALANCE: {balance:.2f} EUR\n")
             f.write("-" * 40 + "\n\n")
+            f.write("TRANSACTION HISTORY (Newest to Oldest):\n")
             
             for record in reversed(self.records):
-                f.write(f"[{record['timestamp']}] {record['amount']} EUR | "
+                if record["amount"] > 0:
+                    t_type = "INCOME"
+                else:
+                    t_type = "EXPENSE"
+                f.write(f"[{record['timestamp']}] {t_type}: "
+                        f"{record['amount']:>8.2f} EUR | "
                         f"{record['category']}: {record['description']}\n")
                         
         print(f"Report saved to: {report_filename}")
@@ -78,7 +85,7 @@ def authenticate_user():
         print("\n=== LOGIN ===")
         print("1. Login")
         print("2. Register")
-        print("3. Exit")
+        print("3. Exit Program")
         choice = input("Select an option: ")
 
         if choice == '3':
@@ -110,45 +117,63 @@ def authenticate_user():
 
 
 def main_menu():
-    """Run the main program loop."""
-    active_user = authenticate_user()
-    if active_user is None:
-        print("Goodbye!")
-        return
-
-    manager = FinanceManager(active_user)
-    
+    """Run the continuous main program loop."""
     while True:
-        print(f"\n--- {active_user.upper()}'S FINANCES ---")
-        print(f"Current Balance: {manager.get_balance():.2f} EUR")
-        print("1. Add Income/Expense")
-        print("2. View History")
-        print("3. Exit and Generate Report")
+        active_user = authenticate_user()
         
-        action = input("Select an action: ")
-
-        if action == '1':
-            try:
-                category = input("Category: ")
-                amount_input = input("Amount (use minus for expenses): ")
-                amount = float(amount_input)
-                description = input("Description: ")
-                manager.add_record(category, amount, description)
-            except ValueError:
-                print("Error: Please enter a valid number.")
-        
-        elif action == '2':
-            print("\n--- HISTORY ---")
-            for record in reversed(manager.records):
-                print(f"{record['timestamp']} | {record['amount']} EUR | "
-                      f"{record['category']} - {record['description']}")
-        
-        elif action == '3':
-            manager.generate_txt_report()
+        if active_user is None:
             print("Exiting program. Goodbye!")
-            break
-        else:
-            print("Invalid choice.")
+            sys.exit()
+
+        manager = FinanceManager(active_user)
+        
+        while True:
+            print(f"\n--- {active_user.upper()}'S FINANCES ---")
+            print(f"Current Balance: {manager.get_balance():.2f} EUR")
+            print("1. Add Income/Expense")
+            print("2. View History")
+            print("3. Logout and Generate Report")
+            print("4. Exit Program")
+            
+            action = input("Select an action: ")
+
+            if action == '1':
+                try:
+                    category = input("Category: ")
+                    amount_input = input("Amount (use minus for expenses): ")
+                    amount = float(amount_input.replace(',', '.'))
+                    description = input("Description: ")
+                    manager.add_record(category, amount, description)
+                except ValueError:
+                    print("Error: Please enter a valid number.")
+            
+            elif action == '2':
+                print("\n--- HISTORY ---")
+                if not manager.records:
+                    print("No records found.")
+                else:
+                    for record in reversed(manager.records):
+                        if record["amount"] > 0:
+                            t_type = "INCOME"
+                        else:
+                            t_type = "EXPENSE"
+                        print(f"[{t_type}] {record['timestamp']} | "
+                              f"{record['amount']} EUR | "
+                              f"{record['category']} - "
+                              f"{record['description']}")
+            
+            elif action == '3':
+                manager.generate_txt_report()
+                print(f"Logging out {active_user}...")
+                break  # Breaks inner loop, returns to login
+                
+            elif action == '4':
+                manager.generate_txt_report()
+                print("Exiting program. Goodbye!")
+                sys.exit()
+                
+            else:
+                print("Invalid choice.")
 
 
 if __name__ == "__main__":
