@@ -1,12 +1,25 @@
+"""
+Personal Finance Tracking Application.
+Final Submission adhering to PEP 8 standards.
+"""
+
 import json
 import os
 import sys
 from datetime import datetime
 
+# Separate paths: JSON files remain in script directory, TXT reports go to parent directory.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PARENT_DIR = os.path.dirname(SCRIPT_DIR)
+
+
+# --- RECORD FACTORY ---
 class RecordFactory:
     """Creates specific record objects based on the requested type."""
+    
     @staticmethod
     def create(record_type, amount, desc, extra_info):
+        """Returns either a Personal or Group record based on input."""
         if record_type == "personal":
             return PersonalRecord(amount, desc, category=extra_info)
         elif record_type == "group":
@@ -14,24 +27,31 @@ class RecordFactory:
         else:
             raise ValueError("Unknown record type")
 
+
+# --- RECORD CLASSES ---
 class Record:
     """Parent base class for all transactions."""
+    
     def __init__(self, amount, desc):
+        """Initializes common attributes for any record."""
         self.amount = amount
         self.desc = desc
         self.timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def prepare_for_saving(self):
-        """Must be overridden by child classes to provide a saveable dictionary."""
+        """Must be overridden by child classes to provide a saveable dictionary format."""
         raise NotImplementedError("Subclasses must implement prepare_for_saving()")
+
 
 class PersonalRecord(Record):
     """Represents a single personal finance transaction."""
+    
     def __init__(self, amount, desc, category):
         super().__init__(amount, desc)
         self.category = category
 
     def prepare_for_saving(self):
+        """Returns the personal record data formatted as a dictionary."""
         return {
             "type": "personal",
             "amount": self.amount,
@@ -40,13 +60,16 @@ class PersonalRecord(Record):
             "timestamp": self.timestamp
         }
 
+
 class GroupRecord(Record):
     """Represents a shared group fund transaction."""
+    
     def __init__(self, amount, desc, contributor):
         super().__init__(amount, desc)
         self.contributor = contributor
 
     def prepare_for_saving(self):
+        """Returns the group record data formatted as a dictionary."""
         return {
             "type": "group",
             "amount": self.amount,
@@ -55,29 +78,39 @@ class GroupRecord(Record):
             "timestamp": self.timestamp
         }
 
+
+# --- DATA MANAGERS ---
 class GroupFundManager:
     """Manages the shared fund containing GroupRecord objects."""
+    
     def __init__(self):
-        self.filename = "group_fund.json"
+        self.filename = os.path.join(SCRIPT_DIR, "group_fund.json")
         self.records = self.load_data()
 
     def load_data(self):
+        """Loads and instantiates GroupRecord objects from the JSON file."""
         if not os.path.exists(self.filename):
             return []
+            
         with open(self.filename, 'r', encoding='utf-8') as f:
             data = json.load(f)
+            
         loaded = []
         for item in data:
-            record = GroupRecord(item["amount"], item["desc"], item["contributor"])
+            record = GroupRecord(
+                item["amount"], item["desc"], item["contributor"]
+            )
             record.timestamp = item["timestamp"]
             loaded.append(record)
         return loaded
 
     def save_data(self):
+        """Saves all group records back to the JSON file."""
         with open(self.filename, 'w', encoding='utf-8') as f:
             json.dump([r.prepare_for_saving() for r in self.records], f, indent=4, ensure_ascii=False)
 
     def add_transaction(self, username, amount, desc):
+        """Creates and adds a new transaction to the group fund."""
         new_record = RecordFactory.create("group", amount, desc, username)
         self.records.append(new_record)
         self.save_data()
@@ -86,42 +119,54 @@ class GroupFundManager:
         print(f"Group fund updated: {username} {t_type} {abs(amount)} EUR.")
 
     def get_total_fund(self):
+        """Returns the total sum available in the group fund."""
         return sum(r.amount for r in self.records)
         
     def view_history(self):
+        """Prints the history of group transactions."""
         print("\n--- GROUP FUND HISTORY ---")
         if not self.records:
             print("No group transactions yet.")
             return
+            
         for r in reversed(self.records):
             t_type = "DEPOSIT" if r.amount > 0 else "WITHDRAWAL"
             print(f"[{t_type}] {r.timestamp} | {abs(r.amount):.2f} EUR | User: {r.contributor} | Desc: {r.desc}")
 
+
 class FinanceManager:
-    """Manages a user's personal finance records."""
+    """Manages personal finance records and their limits."""
+    
     def __init__(self, username, limits):
         self.username = username
         self.limits = limits
-        self.filename = f"data_{username}.json"
+        self.filename = os.path.join(SCRIPT_DIR, f"data_{username}.json")
         self.records = self.load_data()
 
     def load_data(self):
+        """Loads and instantiates PersonalRecord objects from the JSON file."""
         if not os.path.exists(self.filename):
             return []
+            
         with open(self.filename, 'r', encoding='utf-8') as f:
             data = json.load(f)
+            
         loaded = []
         for item in data:
-            record = PersonalRecord(item["amount"], item["desc"], item["category"])
+            record = PersonalRecord(
+                item["amount"], item["desc"], item["category"]
+            )
             record.timestamp = item["timestamp"]
             loaded.append(record)
         return loaded
 
     def save_data(self):
+        """Saves all personal records back to the JSON file."""
         with open(self.filename, 'w', encoding='utf-8') as f:
             json.dump([r.prepare_for_saving() for r in self.records], f, indent=4, ensure_ascii=False)
 
     def check_limits(self, amount):
+        """Checks if deposits exceed daily, weekly, or monthly limits."""
         if amount <= 0:
             return True, ""
 
@@ -129,15 +174,20 @@ class FinanceManager:
         daily = 0
         weekly = 0
         monthly = 0
-        
+
         for r in self.records:
             if r.amount > 0:
                 rec_date = datetime.strptime(r.timestamp, "%Y-%m-%d %H:%M:%S")
-                if rec_date.date() == now.date(): 
+
+                if rec_date.date() == now.date():
                     daily += r.amount
-                if rec_date.isocalendar()[1] == now.isocalendar()[1] and rec_date.year == now.year: 
+
+                if (rec_date.isocalendar()[1] == now.isocalendar()[1] and
+                        rec_date.year == now.year):
                     weekly += r.amount
-                if rec_date.month == now.month and rec_date.year == now.year: 
+
+                if (rec_date.month == now.month and
+                        rec_date.year == now.year):
                     monthly += r.amount
 
         if self.limits.get("daily") and (daily + amount) > self.limits["daily"]:
@@ -150,6 +200,7 @@ class FinanceManager:
         return True, ""
 
     def add_record(self, category, amount, desc):
+        """Adds a record if the limits are respected."""
         allowed, msg = self.check_limits(amount)
         if not allowed:
             print(f"Error: {msg}")
@@ -158,9 +209,10 @@ class FinanceManager:
         new_record = RecordFactory.create("personal", amount, desc, category)
         self.records.append(new_record)
         self.save_data()
-        print(f"Added: {amount} EUR")
+        print(f"Successfully added: {amount} EUR")
 
     def remove_record(self, index):
+        """Removes a record safely by its ID."""
         if 0 <= index < len(self.records):
             removed = self.records.pop(index)
             self.save_data()
@@ -169,25 +221,35 @@ class FinanceManager:
             print("Error: Invalid record ID.")
 
     def get_balance(self):
+        """Returns the total personal balance."""
         return sum(r.amount for r in self.records)
-        
+
     def generate_txt_report(self):
+        """Exports a formatted TXT report to the parent directory."""
         balance = self.get_balance()
-        report_filename = f"{self.username}.txt"
+        report_filename = os.path.join(PARENT_DIR, f"{self.username}.txt")
+        
         with open(report_filename, 'w', encoding='utf-8') as f:
             f.write(f"USER {self.username.upper()} FINANCE REPORT\n")
             f.write("-" * 40 + "\n")
             f.write(f"CURRENT BALANCE: {balance:.2f} EUR\n")
             f.write("-" * 40 + "\n\n")
+            
             for record in reversed(self.records):
                 t_type = "INCOME" if record.amount > 0 else "EXPENSE"
                 f.write(f"[{record.timestamp}] {t_type}: {record.amount:>8.2f} EUR | {record.category}: {record.desc}\n")
+                
         print(f"Report saved to: {report_filename}")
 
+
+# --- AUTHENTICATION & MENUS ---
 def load_users():
-    if os.path.exists("users.json"):
-        with open("users.json", 'r', encoding='utf-8') as f:
+    """Loads users and their limits from the JSON file."""
+    users_file = os.path.join(SCRIPT_DIR, "users.json")
+    if os.path.exists(users_file):
+        with open(users_file, 'r', encoding='utf-8') as f:
             return json.load(f)
+            
     default = {
         "admin": {
             "password": "admin", 
@@ -195,15 +257,20 @@ def load_users():
             "limits": {"daily": None, "weekly": None, "monthly": None}
         }
     }
-    with open("users.json", 'w', encoding='utf-8') as f:
+    with open(users_file, 'w', encoding='utf-8') as f:
         json.dump(default, f, indent=4)
     return default
 
+
 def save_users(users):
-    with open("users.json", 'w', encoding='utf-8') as f:
+    """Saves user data back to the JSON file."""
+    users_file = os.path.join(SCRIPT_DIR, "users.json")
+    with open(users_file, 'w', encoding='utf-8') as f:
         json.dump(users, f, indent=4)
 
+
 def admin_menu(users):
+    """Provides an administrative interface for user management."""
     while True:
         print("\n=== ADMIN PANEL ===")
         print("1. View All Users")
@@ -241,10 +308,13 @@ def admin_menu(users):
                 del users[target]
                 save_users(users)
                 
-                if os.path.exists(f"data_{target}.json"):
-                    os.remove(f"data_{target}.json")
-                if os.path.exists(f"{target}.txt"):
-                    os.remove(f"{target}.txt")
+                data_file = os.path.join(SCRIPT_DIR, f"data_{target}.json")
+                txt_file = os.path.join(PARENT_DIR, f"{target}.txt")
+                
+                if os.path.exists(data_file):
+                    os.remove(data_file)
+                if os.path.exists(txt_file):
+                    os.remove(txt_file)
                 print("User deleted.")
             else:
                 print("Error: User not found or cannot delete admin.")
@@ -253,7 +323,9 @@ def admin_menu(users):
         else:
             print("Invalid choice.")
 
+
 def set_limits_menu(username, users_db):
+    """Displays a menu for the user to configure their deposit limits."""
     print("\n--- DEPOSIT LIMITS ---")
     print("- Type a number to set a limit.")
     print("- Type '0' to REMOVE a limit.")
@@ -283,7 +355,9 @@ def set_limits_menu(username, users_db):
     except ValueError:
         print("Error: Invalid number format.")
 
+
 def authenticate_user():
+    """Handles user login and registration logic."""
     users = load_users()
     while True:
         print("\n=== LOGIN ===")
@@ -323,7 +397,9 @@ def authenticate_user():
         else:
             print("Invalid choice. Try again.")
 
+
 def main_menu():
+    """Main application routing and loop."""
     while True:
         active_user, users_db = authenticate_user()
         
@@ -432,6 +508,7 @@ def main_menu():
                 break
             else:
                 print("Invalid choice.")
+
 
 if __name__ == "__main__":
     main_menu()
